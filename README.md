@@ -20,5 +20,5 @@ IV. Run Program
 ---------------
 See the help
 ```
-node faspass --help
+node fastpass --help
 ```
