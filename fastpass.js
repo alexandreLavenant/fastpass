@@ -1,14 +1,15 @@
 #!/usr/bin/env node
+
 const puppeteer = require('puppeteer'),
 	program = require('commander'),
 	$ = require('cheerio'),
 	bookTicket = async function(browser, zepassId)
 	{
-		if (pageBooked === null) {
-			pageBooked = await browser.newPage();
+		if (pageCommon === null) {
+			pageCommon = await browser.newPage();
 		}
 
-		const response = await pageBooked.goto(`https://www.zepass.com/panier/ajout/annonce/${zepassId}/quantite/1`),
+		const response = await pageCommon.goto(`https://www.zepass.com/panier/ajout/annonce/${zepassId}/quantite/1`),
 			status = response.status(),
 			body = await response.text(),
 			$info = $(body).find('#info-ajout'),
@@ -18,6 +19,24 @@ const puppeteer = require('puppeteer'),
 		var infoText = $info.text().trim();
 		if (status === 500) {
 			infoText = 'Erreur 500';
+			count500++;
+			// Save zepass Id of the first 500
+			if (count500 === 1) {
+				first500Id = zepassId;
+			}
+			
+			console.info(`${zepassId}: ${infoText}`);
+			// If we have more than 3 500 in a row
+			// it means that there is no ticket for the moment
+			// so wait a bit and try until there is a ticket
+			if (count500 > 3) {
+				await sleep(2e3);
+				count500 = 0;
+				return bookTicket(browser, first500Id);
+			}
+
+			// Continue to try it with the next one
+			return bookTicket(browser, ++zepassId);
 		}
 
 		if ($valid.length === 1) {
@@ -37,15 +56,15 @@ const puppeteer = require('puppeteer'),
 		}
 
 		if (
-			status === 500 ||
 			infoText === 'Cette annonce n\'est malheureusement plus disponible.' ||
 			infoText === 'Il n\'y a plus de billet disponible pour cette annonce.' ||
 			infoText === 'Les billets de cette annonce sont vendus de façon indissociable, vous ne pouvez donc pas modifier la quantité sur cette annonce.' ||
 			infoText === 'Le billet a bien été ajouté à votre panier'||
 			infoText === 'Vous ne pouvez pas ajouter ce billet dans votre panier.'
 		) {
-			zepassId++;
-			return bookTicket(browser, zepassId);
+			count500 = 0;
+			first500Id = null;
+			return bookTicket(browser, ++zepassId);
 		}
 	},
 	deleteTicketsBooked = async function(browser)
@@ -76,13 +95,10 @@ const puppeteer = require('puppeteer'),
 	},
 	getTicketsBooked = async function(browser)
 	{
-		const page = await browser.newPage(),
-			response = await page.goto('https://www.zepass.com/panier/panier'),
+		const response = await pageCommon.goto('https://www.zepass.com/panier/panier'),
 			body = await response.text(),
 			$table = $(body).find('#panier-content')
 			;
-
-		await page.close();
 
 		return $table.find('tbody tr');
 	},
@@ -97,11 +113,15 @@ const puppeteer = require('puppeteer'),
 	seeTicketsBooked = async function(browser)
 	{
 		console.info('We found some tickets for you');
-		await pageBooked.close();
-		pageBooked = null;
+		await pageCommon.close();
+		pageCommon = null;
 
 		const page = await browser.newPage();
 		return page.goto('https://www.zepass.com/panier/panier');
+	},
+	sleep = function(ms)
+	{
+		return new Promise(resolve => setTimeout(resolve, ms));
 	},
 	numberPool = 1,
 	promisesPool = []
@@ -115,7 +135,9 @@ program
 	.parse(process.argv)
 	;
 
-var pageBooked = null,
+var pageCommon = null,
+	count500 = 0,
+	first500Id = null,
 	regexTitle = new RegExp('.*' + (program.ticket || '') + '.*', 'mi')
 	;
 
