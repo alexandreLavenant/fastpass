@@ -110,8 +110,8 @@ const puppeteer = require('puppeteer'),
 program
 	.usage('-z <zepassId ...> -t <ticketName ...>')
 	.version(require('./package.json').version, '-v, --version')
-	.option('-z, --zepassId', 'Zepass id')
-	.option('-t, --ticket', 'Ticket you want ex:Hellfest')
+	.option('-z, --zepassId <id>', 'Zepass id', parseInt)
+	.option('-t, --ticket <name>', 'Ticket you want ex:Hellfest')
 	.parse(process.argv)
 	;
 
@@ -123,7 +123,7 @@ puppeteer.launch({ headless: false })
 .then(async browser =>
 {
 	for(let i = 0; i < numberPool; i++) {
-		promisesPool.push(bookTicket(browser, (program.id || '987766')));
+		promisesPool.push(bookTicket(browser, (program.zepassId || '987766')));
 	}
 		
 	await Promise.all(promisesPool);
